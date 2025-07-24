@@ -33,6 +33,9 @@ def init_db():
 
 init_db()
 
+@app.route('/')
+def home():
+    return "✅ Gustanto POS Backend is live!"
 @app.route('/order', methods=['POST'])
 def save_order():
     data = request.json
