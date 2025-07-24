@@ -127,11 +127,33 @@ def chart_month():
             'net_profit': entry['sales'] - entry['expenses']
         })
     return jsonify(result)
-@app.route('/sales', methods=['GET'])
-def get_sales():
-    return jsonify({"message": "✅ Sales endpoint is working!"})
-@app.route('/sales', methods=['POST'])
-def add_sale():
+@app.route('/sales', methods=['GET', 'POST'])
+def sales():
+    if request.method == 'GET':
+        with sqlite3.connect(DB_FILE) as conn:
+            c = conn.cursor()
+            c.execute("SELECT * FROM sales ORDER BY timestamp DESC")
+            sales = [
+                {"id": row[0], "item": row[1], "price": row[2], "timestamp": row[3]}
+                for row in c.fetchall()
+            ]
+        return jsonify(sales)
+
+    if request.method == 'POST':
+        data = request.get_json()
+        item = data['item']
+        price = data['price']
+        timestamp = data['timestamp']
+
+        with sqlite3.connect(DB_FILE) as conn:
+            c = conn.cursor()
+            c.execute("INSERT INTO sales (item, price, timestamp) VALUES (?, ?, ?)", (item, price, timestamp))
+            conn.commit()
+
+        return jsonify({"message": "Sale saved successfully!"}), 201
+
+
+
     data = request.get_json()
     item = data['item']
     price = data['price']
@@ -145,8 +167,7 @@ def add_sale():
     return jsonify({"message": "Sale saved successfully!"}), 201
 
 
-@app.route('/sales', methods=['GET'])
-def get_sales():
+
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
         c.execute("SELECT * FROM sales ORDER BY timestamp DESC")
@@ -155,9 +176,6 @@ def get_sales():
             for row in c.fetchall()
         ]
     return jsonify(sales)
-
-if __name__ == '__main__':
-    app.run(debug=True)
 
 if __name__ == '__main__':
     app.run(debug=True)
