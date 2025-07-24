@@ -7,7 +7,6 @@ from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
-init_db()
 
 DB_FILE = "gustanto_pos.db"
 
@@ -37,6 +36,7 @@ init_db()
 @app.route('/')
 def home():
     return "✅ Gustanto POS Backend is live!"
+
 @app.route('/order', methods=['POST'])
 def save_order():
     data = request.json
@@ -44,7 +44,8 @@ def save_order():
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
         for item in data['order']:
-            c.execute("INSERT INTO sales (item, price, timestamp) VALUES (?, ?, ?)", (item['name'], item['price'], timestamp))
+            c.execute("INSERT INTO sales (item, price, timestamp) VALUES (?, ?, ?)",
+                      (item['name'], item['price'], timestamp))
         conn.commit()
     return jsonify({"status": "success"})
 
@@ -54,7 +55,8 @@ def add_expense():
     timestamp = data.get('timestamp', datetime.now().isoformat())
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
-        c.execute("INSERT INTO expenses (amount, description, timestamp) VALUES (?, ?, ?)", (data['amount'], data['description'], timestamp))
+        c.execute("INSERT INTO expenses (amount, description, timestamp) VALUES (?, ?, ?)",
+                  (data['amount'], data['description'], timestamp))
         conn.commit()
     return jsonify({"status": "expense saved"})
 
@@ -127,6 +129,7 @@ def chart_month():
             'net_profit': entry['sales'] - entry['expenses']
         })
     return jsonify(result)
+
 @app.route('/sales', methods=['GET', 'POST'])
 def sales():
     if request.method == 'GET':
@@ -139,43 +142,17 @@ def sales():
             ]
         return jsonify(sales)
 
-    if request.method == 'POST':
+    elif request.method == 'POST':
         data = request.get_json()
         item = data['item']
         price = data['price']
         timestamp = data['timestamp']
-
         with sqlite3.connect(DB_FILE) as conn:
             c = conn.cursor()
-            c.execute("INSERT INTO sales (item, price, timestamp) VALUES (?, ?, ?)", (item, price, timestamp))
+            c.execute("INSERT INTO sales (item, price, timestamp) VALUES (?, ?, ?)",
+                      (item, price, timestamp))
             conn.commit()
-
         return jsonify({"message": "Sale saved successfully!"}), 201
-
-
-
-    data = request.get_json()
-    item = data['item']
-    price = data['price']
-    timestamp = data['timestamp']
-
-    with sqlite3.connect(DB_FILE) as conn:
-        c = conn.cursor()
-        c.execute("INSERT INTO sales (item, price, timestamp) VALUES (?, ?, ?)", (item, price, timestamp))
-        conn.commit()
-
-    return jsonify({"message": "Sale saved successfully!"}), 201
-
-
-
-    with sqlite3.connect(DB_FILE) as conn:
-        c = conn.cursor()
-        c.execute("SELECT * FROM sales ORDER BY timestamp DESC")
-        sales = [
-            {"id": row[0], "item": row[1], "price": row[2], "timestamp": row[3]}
-            for row in c.fetchall()
-        ]
-    return jsonify(sales)
 
 if __name__ == '__main__':
     app.run(debug=True)
