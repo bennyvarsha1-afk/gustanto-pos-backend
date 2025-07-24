@@ -127,6 +127,9 @@ def chart_month():
             'net_profit': entry['sales'] - entry['expenses']
         })
     return jsonify(result)
+@app.route('/sales', methods=['GET'])
+def get_sales():
+    return jsonify({"message": "✅ Sales endpoint is working!"})
 
 if __name__ == '__main__':
     app.run(debug=True)
