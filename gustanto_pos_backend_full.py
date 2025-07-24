@@ -1,38 +1,46 @@
+
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import sqlite3
 import os
 import csv
 from datetime import datetime
+import schedule
+import threading
+import time
+import requests
 
-app = Flask(__name__)
+app = Flask(__name__) 
 CORS(app)
 
 DB_FILE = "gustanto_pos.db"
+WHATSAPP_API = "https://api.whatsapp.com/send?phone=+918008646239&text="
 
+# --- DB INIT ---
 def init_db():
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
-        c.execute('''
+        c.execute("""
             CREATE TABLE IF NOT EXISTS sales (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 item TEXT,
                 price INTEGER,
                 timestamp TEXT
             )
-        ''')
-        c.execute('''
+        """)
+        c.execute("""
             CREATE TABLE IF NOT EXISTS expenses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 amount INTEGER,
                 description TEXT,
                 timestamp TEXT
             )
-        ''')
+        """)
         conn.commit()
 
 init_db()
 
+# --- ROUTES ---
 @app.route('/')
 def home():
     return "✅ Gustanto POS Backend is live!"
@@ -44,8 +52,7 @@ def save_order():
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
         for item in data['order']:
-            c.execute("INSERT INTO sales (item, price, timestamp) VALUES (?, ?, ?)",
-                      (item['name'], item['price'], timestamp))
+            c.execute("INSERT INTO sales (item, price, timestamp) VALUES (?, ?, ?)", (item['name'], item['price'], timestamp))
         conn.commit()
     return jsonify({"status": "success"})
 
@@ -55,8 +62,7 @@ def add_expense():
     timestamp = data.get('timestamp', datetime.now().isoformat())
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
-        c.execute("INSERT INTO expenses (amount, description, timestamp) VALUES (?, ?, ?)",
-                  (data['amount'], data['description'], timestamp))
+        c.execute("INSERT INTO expenses (amount, description, timestamp) VALUES (?, ?, ?)", (data['amount'], data['description'], timestamp))
         conn.commit()
     return jsonify({"status": "expense saved"})
 
@@ -130,29 +136,37 @@ def chart_month():
         })
     return jsonify(result)
 
-@app.route('/sales', methods=['GET', 'POST'])
-def sales():
-    if request.method == 'GET':
-        with sqlite3.connect(DB_FILE) as conn:
-            c = conn.cursor()
-            c.execute("SELECT * FROM sales ORDER BY timestamp DESC")
-            sales = [
-                {"id": row[0], "item": row[1], "price": row[2], "timestamp": row[3]}
-                for row in c.fetchall()
-            ]
-        return jsonify(sales)
+@app.route('/schedule-summary', methods=['POST'])
+def schedule_summary():
+    schedule.every().day.at("23:59").do(send_whatsapp_summary)
+    return jsonify({"status": "Scheduled daily WhatsApp summary at 23:59"})
 
-    elif request.method == 'POST':
-        data = request.get_json()
-        item = data['item']
-        price = data['price']
-        timestamp = data['timestamp']
-        with sqlite3.connect(DB_FILE) as conn:
-            c = conn.cursor()
-            c.execute("INSERT INTO sales (item, price, timestamp) VALUES (?, ?, ?)",
-                      (item, price, timestamp))
-            conn.commit()
-        return jsonify({"message": "Sale saved successfully!"}), 201
+@app.route('/trigger-schedule-on-login', methods=['POST'])
+def trigger_schedule_on_login():
+    schedule.every().day.at("23:59").do(send_whatsapp_summary)
+    return jsonify({"status": "Scheduler re-triggered on login"})
+
+def send_whatsapp_summary():
+    date = datetime.now().date().isoformat()
+    with sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        c.execute("SELECT SUM(price) FROM sales WHERE DATE(timestamp)=?", (date,))
+        sales_total = c.fetchone()[0] or 0
+        c.execute("SELECT SUM(amount) FROM expenses WHERE DATE(timestamp)=?", (date,))
+        expenses_total = c.fetchone()[0] or 0
+        profit = sales_total - expenses_total
+    message = f"*Gustanto Daily Summary - {date}*\nSales: ₹{sales_total}\nExpenses: ₹{expenses_total}\nNet Profit: ₹{profit}"
+    encoded = requests.utils.quote(message)
+    whatsapp_url = WHATSAPP_API + encoded
+    print("Send WhatsApp Summary:", whatsapp_url)
+    return True
+
+def run_schedule():
+    while True:
+        schedule.run_pending()
+        time.sleep(60)
+
+threading.Thread(target=run_schedule, daemon=True).start()
 
 if __name__ == '__main__':
     app.run(debug=True)
